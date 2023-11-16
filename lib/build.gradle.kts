@@ -29,7 +29,7 @@ publishing {
         create<MavenPublication>("maven") {
             groupId = "com.rustlin"
             artifactId = "rusult"
-            version = "0.0.2"
+            version = "0.0.1"
             from(components["java"])
         }
     }
