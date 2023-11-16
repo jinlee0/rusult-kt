@@ -223,6 +223,22 @@ sealed interface Rusult<T, E> {
         @JvmName("Rusult::cloned::extension")
         fun <T : Clone<T>, E> Rusult<T, E>.cloned(): Rusult<T, E> = cloned(this)
 
+        inline fun <T, reified E> from(result: Result<T>, op: (Throwable) -> E): Rusult<T, E> =
+            if (result.isSuccess) {
+                Ok(result.getOrThrow())
+            } else {
+                Err(op(result.exceptionOrNull()!!))
+            }
+
+        inline fun <T, reified E> from(run: () -> T, op: (Throwable) -> E): Rusult<T, E> =
+            from(runCatching { run() }, op)
+
+        fun <T, E> into(self: Rusult<T, E>): Result<T> =
+            when (self) {
+                is Ok -> Result.success(self.value)
+                is Err -> Result.failure(errorToThrowable(self.err))
+            }
+
         private fun <E> unwrapFailed(msg: String, e: E): Nothing {
             println(msg)
             throw errorToThrowable(e = e)
