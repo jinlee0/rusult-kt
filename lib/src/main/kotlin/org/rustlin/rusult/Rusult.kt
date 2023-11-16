@@ -200,7 +200,7 @@ sealed interface Rusult<T, E> {
                 is Err -> Err(self.err)
             }
 
-        fun <T, E> Rusult<T?, E>.transform(): Rusult<T, E>? = transpose(this)
+        fun <T, E> Rusult<T?, E>.transpose(): Rusult<T, E>? = transpose(this)
 
         fun <T, E> flatten(self: Rusult<Rusult<T, E>, E>): Rusult<T, E> = andThen(self) { it }
 
