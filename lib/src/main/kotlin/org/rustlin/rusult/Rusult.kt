@@ -58,6 +58,22 @@ sealed interface Rusult<T, E> {
 
         fun <T, E> isErr(self: Rusult<T, E>): Boolean = !isOk(self = self)
 
+        fun <T, E> ifOk(self: Rusult<T, E>, op: (T) -> Unit): Rusult<T, E> =
+            self.also {
+                when (it) {
+                    is Ok -> op(it.value)
+                    is Err -> {}
+                }
+            }
+
+        fun <T, E> ifErr(self: Rusult<T, E>, op: (E) -> Unit): Rusult<T, E> =
+            self.also {
+                when (it) {
+                    is Ok -> {}
+                    is Err -> op(it.err)
+                }
+            }
+
         fun <T, E> isOkAnd(self: Rusult<T, E>, f: (T) -> Boolean): Boolean =
             when (self) {
                 is Ok -> f(self.value)
@@ -230,6 +246,8 @@ sealed interface Rusult<T, E> {
                 Err(op(result.exceptionOrNull()!!))
             }
 
+        inline fun <T, reified E> from(result: Result<T>, e: E): Rusult<T, E> = from(result) { e }
+
         inline fun <T, reified E> from(run: () -> T, op: (Throwable) -> E): Rusult<T, E> =
             from(runCatching { run() }, op)
 
@@ -250,4 +268,14 @@ sealed interface Rusult<T, E> {
             else -> RuntimeException(e?.let { it::class.simpleName } ?: "null")
         }
     }
+}
+
+sealed class Some() : RuntimeException() {
+    class Foo() : Some()
+    class Bar() : Some()
+}
+
+fun main() {
+    val r: Rusult<String, Some> = Rusult.from(runCatching { "" }) { Some.Foo() }
+
 }
