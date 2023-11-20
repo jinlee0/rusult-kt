@@ -1,28 +1,141 @@
 package org.rustlin.rusult
 
 sealed interface Rusult<T, E> {
-    class Ok<T, E>(val value: T) : Rusult<T, E>
+    /**
+     * Create one contains success value
+     */
+    class Ok<T, E>(val value: T) : Rusult<T, E> {
+        override fun toString(): String = "Ok(${this.value})"
 
-    class Err<T, E>(val err: E) : Rusult<T, E>
+        override fun equals(other: Any?): Boolean {
+            if (other is Ok<*, *>) {
+                if (other.value == this.value) {
+                    return true
+                }
+            }
+            return false
+        }
+    }
 
+    /**
+     * Create one contains failure value
+     */
+    class Err<T, E>(val err: E) : Rusult<T, E> {
+        override fun toString(): String = "Err(${this.err})"
+
+        override fun equals(other: Any?): Boolean {
+            if (other is Err<*, *>) {
+                if (other.err == this.err) {
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    /**
+     * @return true if the rusult is Ok
+     */
     fun isOk(): Boolean = isOk(this)
 
+    /**
+     * @return true if the rusult is Err
+     */
     fun isErr(): Boolean = isErr(this)
+
+    /**
+     * @return `true` if the result is `Ok` and the value inside of it matches a predicate.
+     */
 
     fun isOkAnd(f: (T) -> Boolean): Boolean = isOkAnd(this, f)
 
+    /**
+     * @return `true` if the result is `Err` and the value inside of it matches a predicate.
+     */
     fun isErrAnd(f: (E) -> Boolean): Boolean = isErrAnd(this, f)
+
+    /**
+     * Converts `Rusult<T, E>` to `T?`
+     * @return `T?` if the Rusult is Ok, and `null` if it is Err
+     */
 
     fun ok(): T? = ok(this)
 
+    /**
+     * Convenrts `Rusult<T, E>` to `E?`
+     * @return `E?` if the Rusult is Err, and `null` if it is Ok
+     */
+
     fun err(): E? = err(this)
 
+    /**
+     * Maps a `Rusult<T, E>` to `Rusult<U, E>` by applying a function to a contained `Ok` value, leaving an `Err` value untouched.
+     * # Examples
+     * ```
+     * val line = "1\n2\n3\n4\n"
+     * for (num in line.lines()) {
+     *      when (val parsed = runCatching { num.toInt() }.into { IllegalStateException() }) {
+     *          is Ok -> println(parsed)
+     *          is Err -> {}
+     *      }
+     * }
+     * ```
+     */
     fun <U> map(op: (T) -> U): Rusult<U, E> = map(this, op)
 
+    /**
+     * Arguments passed to `mapOr` are eagerly evaluated; if you are passing
+     * the result of a function call, it is recommended to use `mapOrElse`,
+     * which is lazily evaluated.
+     * # Examples
+     * ```
+     * val x: Rusult<String, String> = Ok("foo")
+     * assertEquals(3, x.mapOr(42) { it.length })
+     * val y: Rusult<String, String> = Err("bar")
+     * assertEquals(42, y.mapOr(42) { it.length })
+     * ```
+     * @return the provided default (if `Err`), or applies a function to the contained value (if `Ok`),
+     */
     fun <U> mapOr(default: U, op: (T) -> U): U = mapOr(this, default, op)
 
+    /**
+     * Maps a `Rusult<T, E>` to `U` by applying fallback function `default` to
+     * a contained `Err` value, or function `op` to a contained `Ok` value.
+     * This function can be used to unpack a successful result
+     * while handling an error.
+     * # Examples
+     * ```
+     * val k = 21
+
+     * val x: Rusult<String, String> = Ok("foo")
+     * assertEquals(3, x.mapOrElse({ k * 2 }, { it.length }))
+
+     * val y: Rusult<String, String> = Err("bar")
+     * assertEquals(42, y.mapOrElse({ k * 2 }, { it.length }))
+     * ```
+     */
     fun <U> mapOrElse(default: (E) -> U, op: (T) -> U): U = mapOrElse(this, default, op)
 
+    /**
+     * Maps a `Rusult<T, E>` to `Rusult<T, F>` by applying a function to a
+     * contained `Err` value, leaving an `Ok` value untouched.
+     *
+     * This function can be used to pass through a successful result while handling
+     * an error.
+     *
+     *
+     * # Examples
+     *
+     * ```
+     * fn stringify(x: u32) -> String { format!("error code: {x}") }
+     *
+     * let x: Result<u32, u32> = Ok(2);
+     * assert_eq!(x.map_err(stringify), Ok(2));
+     *
+     * let x: Result<u32, u32> = Err(13);
+     * assert_eq!(x.map_err(stringify), Err("error code: 13".to_string()));
+     * ```
+     */
     fun <F> mapErr(op: (E) -> F): Rusult<T, F> = mapErr(this, op)
 
     fun inspect(f: (T) -> Unit): Rusult<T, E> = inspect(this, f)
@@ -56,7 +169,12 @@ sealed interface Rusult<T, E> {
     fun ifOk(op: (T) -> Unit): Rusult<T, E> = ifOk(this, op)
 
     fun ifErr(op: (E) -> Unit): Rusult<T, E> = ifErr(this, op)
+
     fun into(): Result<T> = into(this)
+
+    override fun toString(): String
+
+    override fun equals(other: Any?): Boolean
 
     companion object {
         fun <T, E> isOk(self: Rusult<T, E>): Boolean = self is Ok
@@ -256,7 +374,9 @@ sealed interface Rusult<T, E> {
         fun <T, E> from(run: () -> T, op: (Throwable) -> E): Rusult<T, E> =
             from(runCatching { run() }, op)
 
-        fun <T, E> Result<T>.into(op: (Throwable) -> E): Rusult<T, E> = from(this, op)
+        fun <T, E> Result<T>.toRusult(op: (Throwable) -> E): Rusult<T, E> = from(this, op)
+
+        fun <T> Result<T>.toRusult(): Rusult<T, Unit> = from(this) { }
 
         fun <T, E> into(self: Rusult<T, E>): Result<T> =
             when (self) {
