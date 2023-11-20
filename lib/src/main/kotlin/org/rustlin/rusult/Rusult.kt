@@ -275,13 +275,3 @@ sealed interface Rusult<T, E> {
         }
     }
 }
-
-sealed class Some() : RuntimeException() {
-    class Foo() : Some()
-    class Bar() : Some()
-}
-
-fun main() {
-    val r: Rusult<String, Some> = Rusult.from(runCatching { "" }) { Some.Foo() }
-
-}
