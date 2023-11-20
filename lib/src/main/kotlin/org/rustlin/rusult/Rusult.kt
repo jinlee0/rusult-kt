@@ -33,7 +33,7 @@ sealed interface Rusult<T, E> {
 
     fun unwrap(): T = unwrap(this)
 
-    fun unwrapOrDefault(self: Rusult<T, E>, default: T): T = unwrapOrDefault(this, default)
+    fun unwrapOrDefault(default: T): T = unwrapOrDefault(this, default)
 
     fun expectErr(msg: String): E = expectErr(this, msg)
 
@@ -53,6 +53,11 @@ sealed interface Rusult<T, E> {
 
     fun copied(): Rusult<T, E> = copied(this)
 
+    fun ifOk(op: (T) -> Unit): Rusult<T, E> = ifOk(this, op)
+
+    fun ifErr(op: (E) -> Unit): Rusult<T, E> = ifErr(this, op)
+    fun into(): Result<T> = into(this)
+
     companion object {
         fun <T, E> isOk(self: Rusult<T, E>): Boolean = self is Ok
 
@@ -66,9 +71,6 @@ sealed interface Rusult<T, E> {
                 }
             }
 
-        @JvmName("Rusult::ifOk::extension")
-        fun <T, E> Rusult<T, E>.ifOk(op: (T) -> Unit): Rusult<T, E> = ifOk(this, op)
-
         fun <T, E> ifErr(self: Rusult<T, E>, op: (E) -> Unit): Rusult<T, E> =
             self.also {
                 when (it) {
@@ -76,9 +78,6 @@ sealed interface Rusult<T, E> {
                     is Err -> op(it.err)
                 }
             }
-
-        @JvmName("Rusult::ifErr::extension")
-        fun <T, E> Rusult<T, E>.ifErr(op: (E) -> Unit): Rusult<T, E> = ifErr(this, op)
 
         fun <T, E> isOkAnd(self: Rusult<T, E>, f: (T) -> Boolean): Boolean =
             when (self) {
@@ -256,6 +255,8 @@ sealed interface Rusult<T, E> {
 
         fun <T, E> from(run: () -> T, op: (Throwable) -> E): Rusult<T, E> =
             from(runCatching { run() }, op)
+
+        fun <T, E> Result<T>.into(op: (Throwable) -> E): Rusult<T, E> = from(this, op)
 
         fun <T, E> into(self: Rusult<T, E>): Result<T> =
             when (self) {
