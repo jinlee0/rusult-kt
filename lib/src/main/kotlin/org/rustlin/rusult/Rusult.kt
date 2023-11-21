@@ -15,6 +15,8 @@ sealed interface Rusult<T, E> {
             }
             return false
         }
+
+        override fun hashCode(): Int = this.value.hashCode()
     }
 
     /**
@@ -31,6 +33,8 @@ sealed interface Rusult<T, E> {
             }
             return false
         }
+
+        override fun hashCode(): Int = this.err.hashCode()
     }
 
     /**
@@ -74,7 +78,7 @@ sealed interface Rusult<T, E> {
      * ```
      * val line = "1\n2\n3\n4\n"
      * for (num in line.lines()) {
-     *      when (val parsed = runCatching { num.toInt() }.into { IllegalStateException() }) {
+     *      when (val parsed = runCatching { num.toInt() }.toRusult { IllegalStateException() }) {
      *          is Ok -> println(parsed)
      *          is Err -> {}
      *      }
@@ -127,54 +131,357 @@ sealed interface Rusult<T, E> {
      * # Examples
      *
      * ```
-     * fn stringify(x: u32) -> String { format!("error code: {x}") }
+     * fun stringify(x: Int): String = "error code: $x"
      *
-     * let x: Result<u32, u32> = Ok(2);
-     * assert_eq!(x.map_err(stringify), Ok(2));
+     * val x: Rusult<Int, Int> = Ok(2)
+     * x.mapErr(::stringify) assertEquals Ok(2)
      *
-     * let x: Result<u32, u32> = Err(13);
-     * assert_eq!(x.map_err(stringify), Err("error code: 13".to_string()));
+     * val y: Rusult<Int, Int> = Err(13)
+     * y.mapErr(::stringify) assertEquals Err("error code: 13")
      * ```
      */
     fun <F> mapErr(op: (E) -> F): Rusult<T, F> = mapErr(this, op)
 
+    /** Calls the provided closure with a reference to the contained value (if `Ok`).
+     *
+     * # Examples
+     *
+     * ```
+     * "4".runCatching(String::toDouble)
+     *      .toRusult()
+     *      .inspect { println("original: $it") }
+     *      .map { it.pow(3) }
+     *      .expect("failed to parse number")
+     * ```
+     */
     fun inspect(f: (T) -> Unit): Rusult<T, E> = inspect(this, f)
 
+    /**
+     * Calls the provided closure with a reference to the contained error (if `Err`).
+     *
+     * # Examples
+     *
+     * ```
+     * "nan".runCatching(String::toDouble)
+     *      .toRusult()
+     *      .inspectErr { println("original: $it") }
+     * ```
+     */
     fun inspectErr(f: (E) -> Unit): Rusult<T, E> = inspectErr(this, f)
 
+    /**
+     * Returns the contained `Ok` value
+     *
+     * Because this function may throw exception, its use is generally discouraged.
+     * Instead, prefer to use pattern matching and handle the `Err`
+     * case explicitly, or call `unwrapOr`, `unwrapOrElse`, or
+     * `unwrapOrDefault`.
+     *
+     * # Panics
+     *
+     * Panics if the value is an `Err`, with a panic message including the
+     * passed message, and the content of the `Err`.
+     *
+     *
+     * # Examples
+     *
+     * ```
+     * // Panic
+     * val x: Rusult<Int, String> = Err("emergency failure")
+     * assertThrows(RuntimeException::class.java) {
+     *      x.expect("Testing expect") // java.lang.RuntimeException: String
+     * }
+     * ```
+     *
+     * # Recommended Message Style
+     *
+     * We recommend that `expect` messages are used to describe the reason you
+     * _expect_ the `Rusult` should be `Ok`.
+     *
+     * ```
+     * // Panic
+     * withRusult { System.getenv("IMPORTANT_PATH")!! }
+     *      .expect("env variable `IMPORTANT_PATH` should be set by `wrapper_script.sh`");
+     * ```
+     */
     fun expect(msg: String): T = expect(this, msg)
 
+    /**
+     * Returns the contained `Ok` value
+     *
+     * Because this function may panic, its use is generally discouraged.
+     * Instead, prefer to use pattern matching and handle the `Err`
+     * case explicitly, or call `unwrapOr`, `unwrapOrElse`, or
+     * `unwrapOrDefault`.
+     *
+     * # Panics
+     *
+     * Panics if the value is an `Err`, with a panic message provided by the
+     * `Err`'s value.
+     *
+     * # Examples
+     *
+     * Basic usage:
+     *
+     * ```
+     * val x: Rusult<Int, Unit> = Ok(2)
+     * x.unwrap() assertEquals 2
+     * ```
+     *
+     * ```
+     * // Panic
+     * val x: Rusult<Int, String> = Err("emergency failure");
+     * x.unwrap()
+     * ```
+     */
     fun unwrap(): T = unwrap(this)
 
+    /**
+     * Returns the contained [Ok] value (if [Ok]) or the default (if [Err]).
+     *
+     * # Examples
+     *
+     * ```
+     * val goodYearFromInput = "1909";
+     * val badYearFromInput = "190blarg";
+     * val goodYear = runCatching { goodYearFromInput.toInt() }.toRusult().unwrapOrDefault(2023)
+     * val badYear = runCatching { badYearFromInput.toInt() }.toRusult().unwrapOrDefault(2023)
+     * 1909 assertEquals goodYear
+     * 2023 assertEquals badYear
+     */
     fun unwrapOrDefault(default: T): T = unwrapOrDefault(this, default)
 
+    /**
+     * Returns the contained [Err] value.
+     *
+     * # Panics
+     *
+     * Panics if the value is an [Ok], with a panic message including the
+     * passed message, and the content of the [Ok].
+     *
+     *
+     * # Examples
+     *
+     * ```
+     * val x: Rusult<Int, String> = Ok(10)
+     * assertThrows(RuntimeException::class.java) {
+     *      x.expectErr("Testing expect_err")
+     * }
+     * ```
+     */
     fun expectErr(msg: String): E = expectErr(this, msg)
 
+    /**
+     * Returns the contained [Err] value.
+     *
+     * # Panics
+     *
+     * Panics if the value is an [Ok], with a custom panic message provided
+     * by the [Ok]'s value.
+     *
+     * # Examples
+     *
+     * ```
+     * val x: Rusult<Int, String> = Ok(2);
+     * assertThrows(RuntimeException::class.java) {
+     *      x.unwrapErr()
+     * }
+     * ```
+     *
+     * ```
+     * val y: Rusult<Int, String> = Err("emergency failure");
+     * y.unwrapErr() assertEquals "emergency failure"
+     * ```
+     */
     fun unwrapErr(): E = unwrapErr(this)
 
+    /**
+     * Returns `res` if the result is [Ok], otherwise returns the [Err] value of `self`.
+     *
+     * Arguments passed to `and` are eagerly evaluated; if you are passing the
+     * result of a function call, it is recommended to use [andThen], which is
+     * lazily evaluated.
+     *
+     * # Examples
+     *
+     * ```
+     *   val x: Rusult<Int, String> = Ok(2);
+     *   val y: Rusult<String, String> = Err("late error");
+     *   x.and(y) assertEquals Err("late error")
+     *
+     *   val x1: Rusult<Int, String> = Err("early error");
+     *   val y1: Rusult<String, String> = Ok("foo");
+     *   x1.and(y1) assertEquals Err("early error")
+     *
+     *   val x2: Rusult<Int, String> = Err("not a 2");
+     *   val y2: Rusult<String, String> = Err("late error")
+     *   x2.and(y2) assertEquals Err("not a 2")
+     *
+     *   val x3: Rusult<Int, String> = Ok(2)
+     *   val y3: Rusult<String, String> = Ok("different rusult type")
+     *   x3.and(y3) assertEquals Ok("different rusult type")
+     * ```
+     */
     fun <U> and(res: Rusult<U, E>): Rusult<U, E> = and(this, res)
 
+    /**
+     * Calls `op` if the result is [Ok], otherwise returns the [Err] value of `self`.
+     *
+     * # Examples
+     *
+     * ```
+     * fun pow(n: Int): Rusult<String, String> =
+     *      n.toLong().times(n.toLong())
+     *          .runCatching(::toIntExact)
+     *          .toRusult { "overflowed" }
+     *          .map { it.toString() }
+     * Ok<Int, String>(2).andThen(::pow) assertEquals Ok(4.toString())
+     * Ok<Int, String>(1_000_000).andThen(::pow) assertEquals Err("overflowed")
+     * ```
+     */
     fun <U> andThen(op: (T) -> Rusult<U, E>): Rusult<U, E> = andThen(this, op)
 
+    /**
+     * Returns `res` if the result is [Err], otherwise returns the [Ok] value of `self`.
+     *
+     * Arguments passed to `or` are eagerly evaluated; if you are passing the
+     * result of a function call, it is recommended to use [orElse], which is
+     * lazily evaluated.
+     *
+     * # Examples
+     *
+     * ```
+     * val x: Rusult<Int, String> = Ok(2);
+     * val y: Rusult<Int, String> = Err("late error");
+     * x.or(y) assertEquals Ok(2)
+     *
+     * val x1: Rusult<Int, String> = Err("early error");
+     * val y1: Rusult<Int, String> = Ok(2);
+     * x1.or(y1) assertEquals Ok(2)
+     *
+     * val x2: Rusult<Int, String> = Err("not a 2");
+     * val y2: Rusult<Int, String> = Err("late error");
+     * x2.or(y2) assertEquals Err("late error")
+     *
+     * val x3: Rusult<Int, String> = Ok(2);
+     * val y3: Rusult<Int, String> = Ok(100);
+     * x3.or(y3) assertEquals Ok(2)
+     * ```
+     */
     fun <F> or(res: Rusult<T, F>): Rusult<T, F> = or(this, res)
 
+    /**
+     * Calls `op` if the result is [Err], otherwise returns the [Ok] value of `self`.
+     *
+     * # Examples
+     *
+     * ```
+     *  fun sq(x: Int): Rusult<Int, Int> = Ok(x * x)
+     *  fun err(x: Int): Rusult<Int, Int> = Err(x)
+     *
+     *  Ok<Int, Int>(2).orElse(::sq).orElse(::sq) assertEquals Ok(2)
+     *  Ok<Int, Int>(2).orElse(::err).orElse(::sq) assertEquals Ok(2)
+     *  Err<Int, Int>(3).orElse(::sq).orElse(::err) assertEquals Ok(9)
+     *  Err<Int, Int>(3).orElse(::err).orElse(::err) assertEquals Err(3)
+     * ```
+     */
     fun <F> orElse(op: (E) -> Rusult<T, F>): Rusult<T, F> = orElse(this, op)
 
+    /**
+     * Returns the contained [Ok] value or a provided default.
+     *
+     * Arguments passed to `unwrapOr` are eagerly evaluated; if you are passing
+     * the result of a function call, it is recommended to use [unwrapOrElse],
+     * which is lazily evaluated.
+     *
+     * # Examples
+     *
+     * ```
+     * let default = 2;
+     * let x: Result<u32, &str> = Ok(9);
+     * assert_eq!(x.unwrap_or(default), 9);
+     *
+     * let x: Result<u32, &str> = Err("error");
+     * assert_eq!(x.unwrap_or(default), default);
+     * ```
+     */
     fun unwrapOr(default: T): T = unwrapOr(this, default)
 
+    /**
+     * Returns the contained [Ok] value or computes it from a closure.
+     *
+     *
+     * # Examples
+     *
+     * ```
+     * fn count(x: &str) -> usize { x.len() }
+     *
+     * assert_eq!(Ok(2).unwrap_or_else(count), 2);
+     * assert_eq!(Err("foo").unwrap_or_else(count), 3);
+     * ```
+     */
     fun unwrapOrElse(op: (E) -> T): T = unwrapOrElse(this, op)
 
+    /**
+     * Maps a `Rusult<T, E>` to a `Rusult<T, E>` by copying the contents of the
+     * `Ok` part.
+     *
+     * # Examples
+     *
+     * ```
+     * val value = 12;
+     * val x: Rusult<Int, Int> = Ok(value);
+     * x assertEquals Ok(12)
+     * val copied = x.copied()
+     * copied assertEquals Ok(12)
+     * ```
+     */
     fun copied(): Rusult<T, E> = copied(this)
 
+    /**
+     * Runs `op` if the rusult is [Ok]
+     *
+     * # Examples
+     *
+     * ```
+     * var count = 0
+     *
+     * val ok: Rusult<String, String> = Ok("ok")
+     * ok.ifOk { count++ }
+     * count assertEquals 1
+     *
+     * val err: Rusult<String, String> = Err("err")
+     * err.ifOk { count++ }
+     * count assertEquals 1
+     * ```
+     */
     fun ifOk(op: (T) -> Unit): Rusult<T, E> = ifOk(this, op)
 
+    /**
+     * Runs `op` if the rusult is [Err]
+     *
+     * # Examples
+     *
+     * ```
+     * var count = 0
+     *
+     * val ok: Rusult<String, String> = Ok("ok")
+     * ok.ifErr { count++ }
+     * count assertEquals 0
+     *
+     * val err: Rusult<String, String> = Err("err")
+     * err.ifErr { count++ }
+     * count assertEquals 1
+     * ```
+     */
     fun ifErr(op: (E) -> Unit): Rusult<T, E> = ifErr(this, op)
 
-    fun into(): Result<T> = into(this)
-
-    override fun toString(): String
-
-    override fun equals(other: Any?): Boolean
+    /**
+     * Maps a `Rusult<T,E>` to a `Result<T>`
+     * [Ok] -> [Result.success]
+     * [Err] -> [Result.failure]
+     */
+    fun toResult(): Result<T> = toResult(this)
 
     companion object {
         fun <T, E> isOk(self: Rusult<T, E>): Boolean = self is Ok
@@ -239,7 +546,7 @@ sealed interface Rusult<T, E> {
                 is Err -> default(self.err)
             }
 
-        fun <T, E, F> mapErr(self: Rusult<T, E>, op: (E) -> F): Rusult<T, F> =
+        inline fun <T, E, F> mapErr(self: Rusult<T, E>, op: (E) -> F): Rusult<T, F> =
             when (self) {
                 is Ok -> Ok(self.value)
                 is Err -> Err(op(self.err))
@@ -357,6 +664,26 @@ sealed interface Rusult<T, E> {
         @JvmName("Rusult::clone::extension")
         fun <T : Clone<T>, E : Clone<E>> Rusult<T, E>.clone(): Rusult<T, E> = clone(this)
 
+        /**
+         * Maps a `Rusult<T, E>` to a `Rusult<T, E>` by cloning the contents of the
+         * `Ok` part.
+         *
+         * # Examples
+         *
+         * ```
+         * class CloneableInt(val i: Int) : Clone<CloneableInt> {
+         *      override fun clone(): CloneableInt = CloneableInt(i)
+         *      override fun equals(other: Any?): Boolean = other is CloneableInt && other.i == i
+         *      override fun hashCode(): Int = i.hashCode()
+         * }
+         *
+         * val value = 12;
+         * val x: Rusult<CloneableInt, CloneableInt> = Ok(CloneableInt(value));
+         * x assertEquals Ok(CloneableInt(12))
+         * val cloned = x.cloned()
+         * cloned assertEquals Ok(CloneableInt(12))
+         * ```
+         */
         fun <T : Clone<T>, E> cloned(self: Rusult<T, E>): Rusult<T, E> = map(self) { it.clone() }
 
         @JvmName("Rusult::cloned::extension")
@@ -378,7 +705,7 @@ sealed interface Rusult<T, E> {
 
         fun <T> Result<T>.toRusult(): Rusult<T, Unit> = from(this) { }
 
-        fun <T, E> into(self: Rusult<T, E>): Result<T> =
+        fun <T, E> toResult(self: Rusult<T, E>): Result<T> =
             when (self) {
                 is Ok -> Result.success(self.value)
                 is Err -> Result.failure(errorToThrowable(self.err))
